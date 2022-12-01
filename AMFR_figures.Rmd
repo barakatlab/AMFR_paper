@@ -1,0 +1,418 @@
+---
+title: "AMFR paper: figures"
+author: "Ruizhi Deng"
+date: "December 1, 2022"
+output: html_notebook
+---
+### 1. load raw counts, Kick-out clone10
+```{r}
+AMFR_counts <- read.delim("AMFR_counts.csv",header = T,sep = ",") %>% .[,-6]
+AMFR_data_CPM<-cpm(AMFR_counts[-c(1:3)])
+filtered <- rowSums(AMFR_data_CPM > 1.05 ) >=2
+table(filtered[-c(1:2)])
+AMFR_data_keep <- AMFR_counts[filtered,]
+Condition <- factor(c(rep("Kockout",3),rep("Wildtype",2)))
+colData = data.frame(Condition, row.names = colnames(AMFR_data_keep[-(1:3)]))
+colData$Condition %<>% relevel('Wildtype')
+AMFR_data_list <- newSeqExpressionSet(as.matrix(AMFR_data_keep[-(1:3)]),phenoData = colData,featureData = AMFR_data_keep[(1:3)])
+EDA_nor <- betweenLaneNormalization(AMFR_data_list, which="upper")
+design <- model.matrix(~Condition, data=pData(EDA_nor))
+for_RUVg_list <- DGEList(counts=counts(EDA_nor), group=Condition,genes = EDA_nor@featureData@data)
+for_RUVg_list <- calcNormFactors(for_RUVg_list, method="upperquartile")
+for_RUVg_list <- estimateGLMCommonDisp(for_RUVg_list, design)
+for_RUVg_list <- estimateGLMTagwiseDisp(for_RUVg_list, design)
+fit <- glmFit(for_RUVg_list, design)
+lrt <- glmLRT(fit, coef=2)
+top <- topTags(lrt, n=nrow(EDA_nor))$table
+empirical <- rownames(EDA_nor)[which(!(rownames(EDA_nor) %in% rownames(top)[1:5000]))]
+
+ruvg_nor <- RUVg(EDA_nor, empirical, k=1)
+fData(ruvg_nor) <- fData(EDA_nor)
+design <- model.matrix(~0+W_1+Condition, data=pData(ruvg_nor))
+AMFR_nor_list <- DGEList(counts=counts(ruvg_nor), group=Condition,genes = ruvg_nor@featureData@data)
+AMFR_nor_list <- calcNormFactors(AMFR_nor_list)
+```
+
+
+```{r}
+# load data
+library(readxl)
+library(dplyr)
+AMFR_data <- read_excel("data/AMFR_data.xls")
+```
+
+
+### 1. Supplementary Figure 6D: correlation plot of bological replicates
+```{r}
+library(ggpubr)
+
+lrpkm <- log2(AMFR_data[,11:15] + 1)
+
+KO1_2 <- ggscatter(lrpkm[,c(1,2)],x = "NSC_Clone4_RPKM", y = "NSC_Clone8_RPKM",
+          palette = "jco", add = "reg.line",color = "black", shape = 21, size = 1,
+          conf.int = TRUE,cor.coef = TRUE,
+          cor.coeff.args = list(method = "pearson", label.x = 3, label.sep = "\n"),
+          cor.coef.coord=c(0,10),
+          add.params = list(color = "red", fill = "lightgray"),
+          xlab ="Log2(RPKM+1) NSC_AMFR_KO_B1", ylab = "Log2(RPKM+1) NSC_AMFR_KO_B2")  +
+  font("xlab", size = 8, color = "blue") + 
+  font("ylab", size = 8, color = "blue")
+
+KO1_3 <- ggscatter(lrpkm[,c(1,3)],x = "NSC_Clone4_RPKM", y = "NSC_Clone22_RPKM",
+          palette = "jco", add = "reg.line",color = "black", shape = 21, size = 1,
+          conf.int = TRUE,cor.coef = TRUE,
+          cor.coeff.args = list(method = "pearson", label.x = 3, label.sep = "\n"),
+          cor.coef.coord=c(0,10),
+          add.params = list(color = "red", fill = "lightgray"),
+          xlab ="Log2(RPKM+1) NSC_AMFR_KO_B1", ylab = "Log2(RPKM+1) NSC_AMFR_KO_B3")  +
+  font("xlab", size = 8, color = "blue") + 
+  font("ylab", size = 8, color = "blue")
+
+
+KO2_3 <- ggscatter(lrpkm[,c(2,3)],x = "NSC_Clone8_RPKM", y = "NSC_Clone22_RPKM",
+          palette = "jco", add = "reg.line",color = "black", shape = 21, size = 1, 
+          conf.int = TRUE,cor.coef = TRUE,
+          cor.coeff.args = list(method = "pearson", label.x = 3, label.sep = "\n"),
+          cor.coef.coord=c(0,10),
+          add.params = list(color = "red", fill = "lightgray"),
+          xlab ="Log2(RPKM+1) NSC_AMFR_KO_B2", ylab = "Log2(RPKM+1) NSC_AMFR_KO_B3") +
+  font("xlab", size = 8, color = "blue") + 
+  font("ylab", size = 8, color = "blue")
+
+
+Wt <- ggscatter(lrpkm[,c(4,5)],x = "NSC_Wt_B1_RPKM", y = "NSC_Wt_B2_RPKM",
+          palette = "jco", add = "reg.line",color = "black", shape = 21, size = 1,
+          conf.int = TRUE,cor.coef = TRUE,
+          cor.coeff.args = list(method = "pearson", label.x = 3, label.sep = "\n"),
+          cor.coef.coord=c(0,10),
+          add.params = list(color = "red", fill = "lightgray"),
+          xlab ="Log2(RPKM+1) NSC_Wt_B1", ylab = "Log2(RPKM+1) NSC_Wt_B2") +
+  font("xlab", size = 8, color = "blue") + 
+  font("ylab", size = 8, color = "blue")
+
+pdf("figures/Supplementary_Figure_6D.scatter.pdf")
+ggarrange(KO1_2,KO1_3,KO2_3,Wt, nrow = 2, ncol = 2)
+dev.off()
+
+```
+
+### 2. Supplementary Figure 6E: heatmap of gene expression for NSC and ESC specific genes
+```{r eval=FALSE,include=FALSE}
+library(RColorBrewer)
+library(gplots)
+
+lrpkm_name <- cbind(AMFR_data$symbol,lrpkm); colnames(lrpkm_name)[1] <- "symbol"
+
+NSC_genes <- read.csv("data/NCS_Genes.csv") %>% unique()
+ESC_genes <- read.csv("data/H9_Genes.csv") %>% unique()
+
+rep_genes <- rbind(ESC_genes,NSC_genes)
+rep_genes <- rep_genes[duplicated(rep_genes),]
+
+NSC_AMFR <- lrpkm_name %>% merge(NSC_genes,by="symbol") 
+ESC_AMFR <- lrpkm_name %>% merge(ESC_genes,by="symbol") %>% subset(!(symbol %in% rep_genes))
+
+NSC_ESC <- bind_rows(ESC_AMFR,NSC_AMFR)
+
+union <- NSC_ESC
+rownames(union) <- union[,1]
+union <- union[,-1]
+union <- as.matrix(union)
+colnames(union) <- c("AMFR_KO_B1","AMFR_KO_B2","AMFR_KO_B3","Wt_B1","Wt_B2")
+
+pdf("figures/Supplementary_Figure_6E.ESC_vs_NSC_genes.pdf")
+color=rev(colorRampPalette(brewer.pal(10, "RdBu"))(30))
+heatmap.2(union,Rowv = F,Colv = F,col=color,key=TRUE,key.xlab = "log2(RPKM+1)",dendrogram = 'none',density.info="none",trace="none",breaks = seq(0,6,0.2),keysize = 1,margins = c(9,5),main="ESC vs NSC genes", cexRow = 0.2,cexCol =1.3,offsetCol = 0.1)
+dev.off()
+
+```
+
+### 3. Figure 2E: volcano plot for differentially expressed genes
+```{r message=FALSE, warning=FALSE}
+
+volcanoData <- AMFR_data %>% .[,c(2,5,8:10)] %>% mutate(`log10(FDR)` = log10(FDR))
+
+for_label <- volcanoData %>% subset(symbol %in% c("IDI1", "FDPS", "MVK", "HMGCS1", "MSMO1", "DHCR24", "HMGCR", "HSD17B7", "LSS", "ACAT2", "TM7SF2", "SQLE", "EBP", "NSDHL", "DHCR7", "FDFT1"))  
+
+p<-ggplot(volcanoData, aes(x=logFC, y=-log10(FDR), colour=DE_KOvsWT, fill=DE_KOvsWT)) + 
+ scale_color_manual(values=c("blue", "grey","red"))+
+ geom_point(alpha=0.6,size=2) +
+ xlim(c(-3.8, 2.5)) +
+ ylim(c(0, 12.5)) +
+ theme_bw(base_size = 12, base_family = "Times") +
+ geom_hline(yintercept = -log10(0.05),lty=2,col="black",lwd=0.6)+
+ theme(legend.position="right",
+ panel.grid=element_blank(),
+ legend.title = element_blank(),
+ legend.text= element_text(face="bold", color="black",family = "Times", size=8),
+ plot.title = element_text(hjust = 0.5),
+ axis.text.x = element_text(color="black", size=12),
+ axis.text.y = element_text(color="black", size=12),
+ axis.title.x = element_text(face="bold", color="black", size=12),
+ axis.title.y = element_text(face="bold",color="black", size=12))+
+ labs(x="log2 (Fold Change)",y="-log10 (FDR)",title="Kockout vs Wildtype")
+
+pdf("figures/Figure_2E.volcano.pdf")
+p +geom_point(alpha=0.6,size=2,data=for_label) +
+  ggrepel::geom_label_repel(aes(label = symbol),data = for_label,  color="black",size = 2,fill = alpha(c("white"),0.5), label.padding=.1)
+dev.off()
+
+```
+
+### 4. Figure 2F: boxplots for differentially expressed genes
+```{r message=FALSE, warning=FALSE}
+library("reshape2")
+
+up_genes <- AMFR_data %>%
+  subset(FDR<0.05 & logFC > 0) %>% 
+  select("NSC_Clone4_RPKM","NSC_Clone8_RPKM","NSC_Clone22_RPKM","NSC_Wt_B1_RPKM", "NSC_Wt_B2_RPKM") 
+up_genes <- log2(up_genes + 1)
+
+down_genes <- AMFR_data %>%
+  subset(FDR<0.05 & logFC < 0) %>% 
+  select("NSC_Clone4_RPKM","NSC_Clone8_RPKM","NSC_Clone22_RPKM","NSC_Wt_B1_RPKM", "NSC_Wt_B2_RPKM") 
+down_genes <- log2(down_genes + 1)
+
+df1 <- melt(up_genes)
+colnames(df1) <- c("Group","value")
+df1$Group <- as.character(df1$Group)
+df1$Group[df1$Group %in% c("NSC_Clone4_RPKM","NSC_Clone8_RPKM","NSC_Clone22_RPKM")] <- "Kockout"
+df1$Group[df1$Group %in% c("NSC_Wt_B1_RPKM","NSC_Wt_B2_RPKM")] <- "Wildtype"
+compaired <- list(c("Kockout", "Wildtype"))
+
+df2 <- melt(down_genes)
+colnames(df2) <- c("Group","value")
+df2$Group <- as.character(df2$Group)
+df2$Group[df2$Group %in% c("NSC_Clone4_RPKM","NSC_Clone8_RPKM","NSC_Clone22_RPKM")] <- "Kockout"
+df2$Group[df2$Group %in% c("NSC_Wt_B1_RPKM","NSC_Wt_B2_RPKM")] <- "Wildtype"
+
+p1<-ggplot(data=df1, aes(x=Group, y=value)) + 
+  geom_boxplot(outlier.size=1, aes(fill=Group)) + labs(y="log2(RPKM+1)",x="Up,n=366 genes") +  
+	theme(axis.text.x =  element_text(hjust=1, angle= 45)) +
+  geom_signif(comparisons = compaired,map_signif_level = T,test = t.test) +
+  theme_bw() +
+  theme(panel.grid=element_blank(),panel.border=element_blank(),axis.line=element_line(size=0.51,color = "black"))
+p2<-ggplot(data=df2, aes(x=Group, y=value)) + 
+	geom_boxplot(outlier.size=1, aes(fill=Group)) + labs(y="log2(RPKM+1)", x="Down,n=527 genes") +  
+	theme(axis.text.x = element_text(hjust=1, angle= 45)) +
+  geom_signif(comparisons = compaired,map_signif_level = T,test = t.test) +
+  theme_bw() + 
+  theme(panel.grid=element_blank(),panel.border=element_blank(),axis.line=element_line(size=0.5,color = "black"))
+
+pdf("figures/Figure_2F.expression_boxplot.pdf")
+ggarrange(p1,p2,nrow = 1,ncol = 2,common.legend = TRUE)
+dev.off()
+
+```
+
+### 5. Figure 2D and 2H: heatmaps for differentially expressed genes
+```{r}
+library(pheatmap)
+
+# 1. Figure 2D: all differentially expressed gene
+differently.genes <- AMFR_data %>% 
+  subset(FDR < 0.05) %>% 
+  select(symbol,NSC_Clone4_RPKM,NSC_Clone4_RPKM,NSC_Clone8_RPKM,NSC_Clone22_RPKM,
+         NSC_Wt_B1_RPKM,NSC_Wt_B2_RPKM) %>% as.data.frame()
+
+rownames(differently.genes) <- differently.genes[,1]
+differently.genes<-differently.genes[,-1]
+
+differently.genes<-as.matrix(differently.genes)
+differently.genes <- log2(differently.genes + 1)
+colnames(differently.genes) <- c("AMFR_KO_B1","AMFR_KO_B2","AMFR_KO_B3","Wt_B1","Wt_B2")
+
+pdf("figures/Figure_2H.degs.pdf")
+pheatmap(differently.genes,show_rownames=F, scale="row",border=T, border_color = NA,
+                 fontsize_col = 8, fontsize_row = 8,treeheight_col = F, treeheight_row = T,
+         cluster_cols = F,cluster_rows = T,cellwidth = 32,cellheight = 0.4, 
+         main="Differently expressed genes",fontsize = 5)
+dev.off()
+
+# 2. Figure 2H: SREBP related genes (updated from cell metabolism)
+#SREBP genes, SREBP target genes and non-SREBP target genes
+#SREBP-1c (SREBF1), SREBP-2 (SREBF2), # SREBP genes
+#Insig-1 (INSIG1), HMGCR, HMGCS (HMGCS1), FDS (FDPS), SS (FDFT1), LDLR, ACC (ACACA), FAS, SCD-1 (SCD), and GPAT (PPAT) # SREBP target genes PCSK9, IDOL (MYLIP)
+#SCAP, Insig-2a ((INSIG2)), and Insig-2b # non-SREBP target genes
+
+SREBP.genes <- AMFR_data %>% subset((symbol %in% c("SREBF1", "SREBF2", 
+                                                    "INSIG1", "HMGCR", "HMGCS1", "FDPS", "FDFT1", "LDLR", "ACACA", "FAS", "SCD", "PPAT", "PCSK9", "MYLIP",
+                                                    "SCAP", "INSIG2"))) %>%
+  select(symbol,NSC_Clone4_RPKM,NSC_Clone4_RPKM,NSC_Clone8_RPKM,
+         NSC_Clone22_RPKM,NSC_Wt_B1_RPKM,NSC_Wt_B2_RPKM) %>% .[c(3,15,
+                                                                 14,7,6,12,4,11,16,2,5,10,13,1,
+                                                                 8,9),] %>% #reorder rows
+  as.data.frame()
+  
+
+rownames(SREBP.genes)<-SREBP.genes[,1]
+SREBP.genes<-SREBP.genes[,-1]
+
+SREBP.genes<-as.matrix(SREBP.genes)
+SREBP.genes <- log2(SREBP.genes + 1)
+colnames(SREBP.genes) <- c("AMFR_KO_B1","AMFR_KO_B2","AMFR_KO_B3","Wt_B1","Wt_B2")
+
+pdf("figures/Figure_2H.SREBP_genes.pdf")
+pheatmap(SREBP.genes,show_rownames=T, scale="row",border=T, border_color = "black",
+         fontsize_col = 8, fontsize_row = 8,treeheight_col = F, treeheight_row = F,
+         cluster_cols = F, cluster_rows = F,cellwidth = 32,cellheight = 12, 
+         main="",fontsize = 2)
+dev.off()
+
+# 2. Figure 2H: cholesterol biosynthesis pathway 
+# "HMGCS1", "HMGCR", "MVK", "PMVK", "MVD", "IDI1", "FDPS", "FDFT1", "SQLE", "LSS", "CYP51A1", "SC4MOL (MSMO1)", "NSDHL", "SC5DL (SC5D)", "DHCR7"
+cholesterol.genes <- AMFR_data %>% subset((symbol %in% c("HMGCS1", "HMGCR", "MVK", "PMVK", "MVD", "IDI1", "FDPS", "FDFT1", "SQLE", "LSS", "CYP51A1", "MSMO1", "NSDHL", "SC5D", "DHCR7"))) %>%
+  select(symbol,NSC_Clone4_RPKM,NSC_Clone4_RPKM,NSC_Clone8_RPKM,
+         NSC_Clone22_RPKM,NSC_Wt_B1_RPKM,NSC_Wt_B2_RPKM) %>% .[c(8,9,7,13,14,3,12,4,5,11,1,2,10,6,15),] %>% #reorder rows
+  as.data.frame()
+
+rownames(cholesterol.genes)<-cholesterol.genes[,1]
+cholesterol.genes<-cholesterol.genes[,-1]
+
+cholesterol.genes<-as.matrix(cholesterol.genes)
+cholesterol.genes <- log2(cholesterol.genes + 1)
+colnames(cholesterol.genes) <- c("AMFR_KO_B1","AMFR_KO_B2","AMFR_KO_B3","Wt_B1","Wt_B2")
+
+pdf("figures/Figure_2H.cholesterol_biosynthesis_pathway.pdf")
+pheatmap(cholesterol.genes,show_rownames=T, scale="row",border=T, border_color = "black",
+         fontsize_col = 8, fontsize_row = 8,treeheight_col = F, treeheight_row = F,
+         cluster_cols = F, cluster_rows = F,cellwidth = 32,cellheight = 12, 
+         main="",fontsize = 2)
+dev.off()
+
+# 2. Figure 2H: ER-stress genes from pulications
+ER_stress.genes <- AMFR_data %>% subset((symbol %in% c("XBP1", "HSPA5", "ATF4", "EDEM1", "ATF6", "ERN1", "EIF2AK3", "DDIT3", "HYOU1", "PDIA5", "HERPUD1"))) %>%
+  select(symbol,NSC_Clone4_RPKM,NSC_Clone4_RPKM,NSC_Clone8_RPKM,
+         NSC_Clone22_RPKM,NSC_Wt_B1_RPKM,NSC_Wt_B2_RPKM) %>% #reorder rows
+  as.data.frame()
+
+rownames(ER_stress.genes)<-ER_stress.genes[,1]
+ER_stress.genes<-ER_stress.genes[,-1]
+
+ER_stress.genes<-as.matrix(ER_stress.genes)
+ER_stress.genes <- log2(ER_stress.genes + 1)
+colnames(ER_stress.genes) <- c("AMFR_KO_B1","AMFR_KO_B2","AMFR_KO_B3","Wt_B1","Wt_B2")
+
+pdf("figures/Figure_2H.ER_stress.genes.pdf")
+pheatmap(ER_stress.genes,show_rownames=T, scale="row",border=T, border_color = "black",
+         fontsize_col = 8, fontsize_row = 8,treeheight_col = F, treeheight_row = F,
+         cluster_cols = F, cluster_rows = F,cellwidth = 32,cellheight = 12, 
+         main="",fontsize = 2)
+dev.off()
+```
+
+### 6. Figure 2G: GOChord plot of functional enrichment
+```{r}
+# 1. Functional enrichment analysis for supplementary table
+library(enrichR)
+library(dplyr)
+
+listEnrichrSites()
+setEnrichrSite("Enrichr")
+websiteLive <- TRUE
+dbs <- listEnrichrDbs()
+dbs.name <- dbs$libraryName
+
+AMFR_up <- AMFR_data %>% subset(FDR < 0.05 & logFC > 0)
+AMFR_up.symbol <- AMFR_up$symbol
+AMFR_down<- AMFR_data %>% subset(FDR < 0.05 & logFC < 0)
+AMFR_down.symbol <- AMFR_down$symbol
+
+if (websiteLive) {
+    enriched_down <- enrichr(AMFR_down.symbol, dbs.name)
+}
+
+if (websiteLive) {
+    enriched_up <- enrichr(AMFR_up.symbol, dbs.name)
+}
+
+df.enriched_down <- do.call(rbind, enriched_down)
+df.enriched_up <- do.call(rbind, enriched_up)
+
+df.enriched_down$raw_source <- rownames(df.enriched_down)
+df.enriched_up$raw_source <- rownames(df.enriched_up)
+
+df.enriched_down$Source <- gsub("\\..*", "", as.character(df.enriched_down$raw_source))
+df.enriched_up$Source <- gsub("\\..*", "", as.character(df.enriched_up$raw_source))
+
+df.enriched_down <- df.enriched_down %>% 
+  group_by(Source) %>% 
+  arrange(Source, P.value) %>% 
+  filter(row_number() %in% c(1:10)) %>% 
+  mutate(NSC_DEG = "KO_Downregulated_527_Genes") %>%
+  select("NSC_DEG", "Source", "Term", "P.value", "Adjusted.P.value", "Combined.Score", "Genes")
+  
+df.enriched_up <- df.enriched_up %>% 
+  group_by(Source) %>% 
+  arrange(Source, P.value) %>% 
+  filter(row_number() %in% c(1:10)) %>% 
+  mutate(NSC_DEG = "KO_Upregulated_366_Genes") %>%
+  select("NSC_DEG", "Source", "Term", "P.value", "Adjusted.P.value", "Combined.Score", "Genes")  
+
+KO_enrichment <- rbind(df.enriched_down, df.enriched_up)
+write.csv(KO_enrichment, "data/KO_enrichment.csv", row.names = F)
+```
+
+
+```{r}
+# 2. GOChord plot
+library(GOplot)
+library(data.table)
+library(tidyverse)
+
+AMFR_GOChord <- AMFR_data %>% select(c("symbol", "logFC")); colnames(AMFR_GOChord) <- c("ID", "logFC")
+Enrichment <- read_xlsx("data/KO_enrichment.xlsx") %>% 
+  subset(Source == "WikiPathway_2021_Human") %>% 
+  .[c(1:2, 11:12),c(2,1,3,7,5)]; colnames(Enrichment) <- c("Category", "ID", "Term", "Genes", "adj_pval")
+
+Enrichment$Genes <- gsub(";", ",", Enrichment$Genes)
+
+circ <- circle_dat(Enrichment, AMFR_GOChord)
+
+chord <- chord_dat(data = circ, genes = AMFR_GOChord$ID, process = Enrichment$Term)
+chord <- chord_dat(data = circ, genes =as.data.frame(AMFR_GOChord), process = Enrichment$Term) 
+
+pdf("figures/Figure_2G.chord_enrich.pdf")
+GOChord(chord, title = "GOChord plot",
+        space = 0.02,
+        process.label = 2,
+        gene.order = 'logFC', gene.space = 0.5, gene.size = 3, 
+        lfc.col=c('firebrick3', 'white','royalblue3'),
+        ribbon.col=brewer.pal(length(Enrichment$Term), "Set3"))
+dev.off()
+
+```
+
+### 6. Supplementary Figure 6G: gsea analysis
+```{r}
+library(clusterProfiler)
+library(qusage)
+library(stringr)
+library(org.Hs.eg.db)
+library(ggridges)
+library(enrichplot)
+
+AMFR_gsea <- AMFR_data %>% 
+  dplyr::select(c("symbol", "logFC")) %>%
+  dplyr::distinct(symbol,.keep_all=TRUE) %>% as.data.frame()
+
+# generate GSEA table
+geneList <- AMFR_gsea$logFC
+names(geneList) <- AMFR_gsea$symbol
+geneList <- sort(geneList, decreasing = T)
+
+# perform GSEA analysis
+wiki_gmt <- read.gmt("data/c2.cp.wikipathways.v7.4.symbols.gmt") # please download from the Human MSigDB database
+wiki_pathway <- GSEA(geneList, TERM2GENE = wiki_gmt)
+
+# plot GSEA figures
+pdf("figures/Supplementary_Figure_6G.GSEA_cholesterol.pdf")
+gseaplot2(wiki_pathway,geneSetID = 1,color="blue",title = wiki_pathway$Description[1]) 
+dev.off()
+
+pdf("figures/Supplementary_Figure_6G.GSEA_wiki.pdf")
+ridgeplot(wiki_pathway)
+dev.off()
+```
+
+
