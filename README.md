@@ -1,2 +1,3 @@
 # AMFR_paper
-Figures
+
+data included all tables for analysis
