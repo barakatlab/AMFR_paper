@@ -4,35 +4,6 @@ author: "Ruizhi Deng"
 date: "December 1, 2022"
 output: html_notebook
 ---
-### 1. load raw counts, Kick-out clone10
-```{r}
-AMFR_counts <- read.delim("AMFR_counts.csv",header = T,sep = ",") %>% .[,-6]
-AMFR_data_CPM<-cpm(AMFR_counts[-c(1:3)])
-filtered <- rowSums(AMFR_data_CPM > 1.05 ) >=2
-table(filtered[-c(1:2)])
-AMFR_data_keep <- AMFR_counts[filtered,]
-Condition <- factor(c(rep("Kockout",3),rep("Wildtype",2)))
-colData = data.frame(Condition, row.names = colnames(AMFR_data_keep[-(1:3)]))
-colData$Condition %<>% relevel('Wildtype')
-AMFR_data_list <- newSeqExpressionSet(as.matrix(AMFR_data_keep[-(1:3)]),phenoData = colData,featureData = AMFR_data_keep[(1:3)])
-EDA_nor <- betweenLaneNormalization(AMFR_data_list, which="upper")
-design <- model.matrix(~Condition, data=pData(EDA_nor))
-for_RUVg_list <- DGEList(counts=counts(EDA_nor), group=Condition,genes = EDA_nor@featureData@data)
-for_RUVg_list <- calcNormFactors(for_RUVg_list, method="upperquartile")
-for_RUVg_list <- estimateGLMCommonDisp(for_RUVg_list, design)
-for_RUVg_list <- estimateGLMTagwiseDisp(for_RUVg_list, design)
-fit <- glmFit(for_RUVg_list, design)
-lrt <- glmLRT(fit, coef=2)
-top <- topTags(lrt, n=nrow(EDA_nor))$table
-empirical <- rownames(EDA_nor)[which(!(rownames(EDA_nor) %in% rownames(top)[1:5000]))]
-
-ruvg_nor <- RUVg(EDA_nor, empirical, k=1)
-fData(ruvg_nor) <- fData(EDA_nor)
-design <- model.matrix(~0+W_1+Condition, data=pData(ruvg_nor))
-AMFR_nor_list <- DGEList(counts=counts(ruvg_nor), group=Condition,genes = ruvg_nor@featureData@data)
-AMFR_nor_list <- calcNormFactors(AMFR_nor_list)
-```
-
 
 ```{r}
 # load data
